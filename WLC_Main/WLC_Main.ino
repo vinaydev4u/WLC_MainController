@@ -30,8 +30,8 @@ const int buzzerPin = A3;
 const int LED3 = 8;
 
 //Relay Pins
-const int Relay1 = 11;
-const int Relay2 = 10;
+const int sumpMotorPin = 11;
+const int boreMotorPin = 10;
 const int Relay3 = 13;
 
 //Configuration or Reset Setting PIN
@@ -152,8 +152,8 @@ void setup() {
      pinMode(LED3, OUTPUT);
 
     //Relay Pins
-     pinMode(Relay1, OUTPUT);
-     pinMode(Relay2, OUTPUT);
+     pinMode(sumpMotorPin, OUTPUT);
+     pinMode(boreMotorPin, OUTPUT);
      pinMode(Relay3, OUTPUT);
 
   //Logging
@@ -190,8 +190,11 @@ void loop() {
         //Configuration Setup for each tank with parameters required
         SetupConfiguration();
      }
-     
 
+     HandleSensorValues(1,20);
+
+     
+     
 //   delay(400);
 //   if(digitalRead(keypadOKPin) == false)
 //   {
@@ -237,6 +240,142 @@ void loop() {
 //    delay(400);
 //    digitalWrite(buzzerPin, LOW);
   
+}
+
+//
+void HandleSensorValues(int tankCount, float tankDistance)
+{
+     bool upperTankON = false;
+     bool upperTankOFF = false;
+     bool primaryTankFilled = false;
+
+     //Actual logic commenting for some time
+    // for(int tankCount = 1; tankCount <= TanksSelected ; tankCount++)
+  //   {
+        bool primary = false;
+
+        if(m_pConfigureLib)
+            primary = m_pConfigureLib->IsTankPrimary(tankCount);
+            
+        //float tankDistance = GetTankStatus(tankCount);
+
+       //if(m_pConfigureLib)
+        //  m_pConfigureLib->SetTankFilledHeight(tankCount,tankDistance);
+
+        char tName[10] = "";
+
+        if(tankCount == PrimaryTankNo)
+          strcpy(tName,"Sump");
+        else
+          strcpy(tName,"Tank%d:");
+            
+        String tankName = FormatIntMessage(tName,tankCount);
+
+        if(EnableDebug)
+        {
+          Serial.print("Tank Status :");
+          Serial.print(tankName);
+          Serial.println(tankDistance);
+        }
+        
+        float tankHeight = 0;
+        if(m_pConfigureLib)
+          tankHeight =  m_pConfigureLib->GetTankFillHeight(tankCount);
+  
+        //Calculate levels dynamically
+        leve0 = (tankHeight *0.05); //zero level or 5%
+        leve20 = (tankHeight * 0.20);//20 % of the tank height
+        leve50 = (tankHeight * 0.50);//50% of tank height
+        leve80 = (tankHeight * 0.80);//80% of tank height
+        leve100 = tankHeight;//50% of tank height
+  
+        ShowTankStatusInLCD(tankName,tankDistance,tankHeight);
+        delay(1000);
+        
+        if(tankDistance > ErrorReading)
+        {
+            LogSerial(false,logFunc,false,String("Sesor Error !!"));
+        }
+
+        //Check primary tank/Sump filled status
+        if(primary)
+        {
+          if(tankDistance >= leve80)
+              primaryTankFilled = false;
+           else
+              primaryTankFilled = true;
+        }
+        else
+        {
+          //Check T2,T3 full staus
+          if(!upperTankON)
+          {
+            if(tankDistance >= leve80)
+                upperTankON = true;
+            else
+                upperTankON = false;
+          }
+          
+          if(tankDistance <= leve20)
+              upperTankOFF = true;
+          else
+              upperTankOFF = false;
+
+        }
+      
+    // }
+
+     //This controls sump and borewell pins
+     CoreControllerLogic(primaryTankFilled,upperTankON,upperTankOFF);
+}
+
+//Core control logic of WLC
+void CoreControllerLogic(bool primaryTankFilled,bool upperTankON,bool upperTankOFF)
+{
+
+ // Serial.println(primaryTankFilled);
+  //Serial.println(upperTankON);
+  //Serial.println(upperTankOFF);
+  
+  if(!upperTankON && upperTankOFF )
+  {
+    //SUMP & BORE Motor OFF
+    digitalWrite(sumpMotorPin, LOW);
+    digitalWrite(boreMotorPin, LOW);
+  }
+  else
+  {
+    if(primaryTankFilled)
+    {
+      if(upperTankON)
+      {
+        //SUMP MOTOR ON
+        digitalWrite(sumpMotorPin, HIGH);
+        //Bore pump OFF
+        digitalWrite(boreMotorPin, LOW);
+      }
+    }
+    else
+    {
+      if(upperTankON)
+      {
+        //SUMP Motor OFF
+        digitalWrite(sumpMotorPin, LOW);
+       //Bore pump ON
+        digitalWrite(boreMotorPin, HIGH);
+      }
+      else if(upperTankOFF)
+      {
+         //Bore MOTOR OFF
+         digitalWrite(boreMotorPin, LOW);
+
+         //SUMP MOTOR OFF
+         digitalWrite(sumpMotorPin, LOW);
+      }
+    }
+   
+  }
+     
 }
 
 //Initialize LCD with welcome message
