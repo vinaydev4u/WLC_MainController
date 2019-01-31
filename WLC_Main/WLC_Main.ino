@@ -4,9 +4,12 @@
 //EEPROM is to store values offline even when device is power off
 #include <EEPROM.h>
 #include <stdio.h>
+#include <Wire.h>
 
 #include "ConfigureLib.h"
-#include "TransferI2C_WLC.h"
+#include <TransferI2C_WLC.h>
+
+int TransmitDeviceNo = 1;
 
 // initialize the library by associating any needed LCD interface pin
 // with the arduino pin number it is connected to
@@ -127,6 +130,13 @@ const int PrimaryTankNo = 1;
 //Error reading for valus in inches
 const int ErrorReading = 1000;
 
+struct TANK_DATA_STRUCTURE {
+int tankNo;
+float sensorValue;
+};
+//create object
+TANK_DATA_STRUCTURE Tank_Data;
+TransferI2C_WLC Transfer; 
 
 //Basic setup
 void setup() {
@@ -157,9 +167,13 @@ void setup() {
      pinMode(Relay3, OUTPUT);
 
   //Logging
+    
+    Wire.begin(TransmitDeviceNo); // join i2c bus (address optional for master)
     Serial.begin(9600); // Starts the serial communication
-
-
+    
+    Transfer.begin(details(Tank_Data), &Wire);  //this initializes the Send_data data object
+    Wire.onReceive(receive); // register event
+     
     //Read EEPROM to check data exists
     if(EEPROM.read(DataSetAddress) == 1)
     {
@@ -171,11 +185,12 @@ void setup() {
       SetupConfiguration();
     }
 }
+void receive(int numBytes) {} 
 
 void loop() {
 
   //Check for reset pin to reset the configration settings
-     if(digitalRead(keypadResetPin) == true)
+     if(digitalRead(keypadResetPin) == false)
      {
         if(EnableDebug)
           Serial.println("Reset Pin pressed");
@@ -191,9 +206,14 @@ void loop() {
         SetupConfiguration();
      }
 
-     HandleSensorValues(1,20);
-
-     
+     //The I2C Master addresses slaves
+    if(Transfer.receiveData())
+    {               
+      Serial.println(Tank_Data.tankNo);   
+      Serial.println(Tank_Data.sensorValue);   
+     //HandleSensorValues(Recv_Data.tankNo,Recv_Data.sensorValue);
+    }
+    
      
 //   delay(400);
 //   if(digitalRead(keypadOKPin) == false)
@@ -663,9 +683,9 @@ int GetUserInput(int col,int row,int maxValue)
       Serial.println(okKeyState);
   
    // Run while loop till user press enter key
-   while(!okKeyState)
+   while(okKeyState)
     {
-        if(digitalRead(keypadOKPin) == true)
+        if(digitalRead(keypadOKPin) == false)
         {
           delay(500);
 
@@ -675,7 +695,7 @@ int GetUserInput(int col,int row,int maxValue)
           break;
         }
         //Take first input
-        else if(digitalRead(keypadUpPin) == true)
+        else if(digitalRead(keypadUpPin) == false)
         {
           if(++digit > maxValue)
             digit = maxValue;
@@ -685,7 +705,7 @@ int GetUserInput(int col,int row,int maxValue)
           lcd.setCursor(col,row);     
           lcd.print(digit);  
         }
-        else if(digitalRead(keypadDownPin) == true)
+        else if(digitalRead(keypadDownPin) == false)
         {
             if(--digit < 0)
               digit = 0;
