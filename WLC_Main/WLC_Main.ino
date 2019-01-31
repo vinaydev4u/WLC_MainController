@@ -130,13 +130,23 @@ const int PrimaryTankNo = 1;
 //Error reading for valus in inches
 const int ErrorReading = 1000;
 
+
+//Tanks data structure
 struct TANK_DATA_STRUCTURE {
 int tankNo;
 float sensorValue;
 };
-//create object
+
+//Config data structure
+struct CONFIG_DATA_STRUCTURE {
+int TotalTanks;
+};
+
+//create Datastructures objects for I2C 
 TANK_DATA_STRUCTURE Tank_Data;
-TransferI2C_WLC Transfer; 
+CONFIG_DATA_STRUCTURE Config_Data;
+
+TransferI2C_WLC TransferOut,TransferIn; 
 
 //Basic setup
 void setup() {
@@ -169,9 +179,13 @@ void setup() {
   //Logging
     
     Wire.begin(TransmitDeviceNo); // join i2c bus (address optional for master)
+    //define handler function on requesting data  
+    Wire.onRequest(request);
+  
     Serial.begin(9600); // Starts the serial communication
     
-    Transfer.begin(details(Tank_Data), &Wire);  //this initializes the Send_data data object
+    TransferIn.begin(details(Tank_Data), &Wire);  //this initializes the Tank_data data object
+    TransferOut.begin(details(Config_Data), &Wire);  //this initializes the Config_data data object
     Wire.onReceive(receive); // register event
      
     //Read EEPROM to check data exists
@@ -186,6 +200,15 @@ void setup() {
     }
 }
 void receive(int numBytes) {} 
+
+void request() {
+
+  //Serial.println("Send Config Data Request");   
+  Config_Data.TotalTanks = TanksSelected - 1;
+  TransferOut.flagSlaveSend();
+  TransferOut.sendData();     
+  
+}
 
 void loop() {
 
@@ -207,7 +230,7 @@ void loop() {
      }
 
      //The I2C Master addresses slaves
-    if(Transfer.receiveData())
+    if(TransferIn.receiveData())
     {               
       Serial.println(Tank_Data.tankNo);   
       Serial.println(Tank_Data.sensorValue);   
