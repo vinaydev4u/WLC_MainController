@@ -203,7 +203,6 @@ void receive(int numBytes) {}
 
 void request() {
 
-  TransferOut.sendData();     
   //Serial.println("Send Config Data Request");
 //  Config_Data.TotalTanks = TanksSelected - 1;
 //  TransferOut.flagSlaveSend();
@@ -215,7 +214,6 @@ void request() {
 void loop() {
 
   //Check for reset pin to reset the configration settings
-//    //Test Relays
   if (digitalRead(keypadResetPin) == false)
   {
     if (EnableDebug)
@@ -226,6 +224,7 @@ void loop() {
     for (int i = 1; i <= MaxDataAddress ; i++)
       EEPROM.write(i, 0);
 
+    DataAddress = 1;
 
     //Configuration Setup for each tank with parameters required
     SetupConfiguration();
@@ -237,9 +236,12 @@ void loop() {
 
      Serial.println("I2C_SUMP_MODULE_ADDRESS");
      Serial.println(Tank_Data.tankNo);
+     Serial.println(Tank_Data.sensorValue);
+
      delay(300);
   }
 
+  if(TransferIn.receiveData(I2C_TANK_MODULE_ADDRESS)){      
 
      Serial.println("I2C_TANK_MODULE_ADDRESS");
      Serial.println(Tank_Data.tankNo);
@@ -290,6 +292,7 @@ void loop() {
   //    delay(1000);
   //    digitalWrite(Relay3, LOW);
   //
+  //  //Test  Buzzer
   //    digitalWrite(buzzerPin, HIGH);
   //    delay(400);
   //    digitalWrite(buzzerPin, LOW);
