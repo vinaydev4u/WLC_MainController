@@ -131,6 +131,11 @@ const int PrimaryTankNo = 1;
 //Error reading for valus in inches
 const int ErrorReading = 1000;
 
+//Tank handling status in core logic
+bool UpperTankON = false;
+bool UpperTankOFF = false;
+bool PrimaryTankFilled = false;
+  
 
 //Tanks data structure
 struct TANK_DATA_STRUCTURE {
@@ -147,13 +152,13 @@ struct CONFIG_DATA_STRUCTURE {
 TANK_DATA_STRUCTURE Tank_Data;
 CONFIG_DATA_STRUCTURE Config_Data;
 
+TANK_DATA_STRUCTURE Tanks_Data[MaxTanksSupported];
 TransferI2C_WLC TransferOut, TransferIn;
 
 //Basic setup
 void setup() {
 
   // put your setup code here, to run once:
-
   //Initialization
   InitializeLCD();
 
@@ -185,7 +190,7 @@ void setup() {
   Serial.begin(9600); // Starts the serial communication
 
   TransferIn.begin(details(Tank_Data), &Wire);  //this initializes the Tank_data data object
-  TransferOut.begin(details(Config_Data), &Wire);  //this initializes the Config_data data object
+  TransferOut.begin(details(Tank_Data), &Wire);  //this initializes the Config_data data object
   Wire.onReceive(receive); // register event
 
   //Read EEPROM to check data exists
@@ -202,12 +207,6 @@ void setup() {
 void receive(int numBytes) {}
 
 void request() {
-
-  //Serial.println("Send Config Data Request");
-//  Config_Data.TotalTanks = TanksSelected - 1;
-//  TransferOut.flagSlaveSend();
-//  TransferOut.sendData();
-
 }
 
 
@@ -216,6 +215,7 @@ void loop() {
   //Check for reset pin to reset the configration settings
   if (digitalRead(keypadResetPin) == false)
   {
+    delay(200);
     if (EnableDebug)
       Serial.println("Reset Pin pressed");
 
@@ -229,92 +229,47 @@ void loop() {
     //Configuration Setup for each tank with parameters required
     SetupConfiguration();
   }
-
- 
-  if(TransferIn.receiveData(I2C_SUMP_MODULE_ADDRESS)){      
-
-
-     Serial.println("I2C_SUMP_MODULE_ADDRESS");
-     Serial.println(Tank_Data.tankNo);
-     Serial.println(Tank_Data.sensorValue);
-
-     delay(300);
-  }
-
-  if(TransferIn.receiveData(I2C_TANK_MODULE_ADDRESS)){      
-
-     Serial.println("I2C_TANK_MODULE_ADDRESS");
-     Serial.println(Tank_Data.tankNo);
-     Serial.println(Tank_Data.sensorValue);
-
-     delay(300);
-  }
+  else
+  {
+    //Send Max tank details to Tank module
+    //Tank_Data.TotalTanks = TanksSelected - 1;
+    TransferOut.sendData(I2C_TANK_MODULE_ADDRESS);
   
+    //Read Sensors value from Sump module
+    if (TransferIn.receiveData(I2C_SUMP_MODULE_ADDRESS)) {
 
+//      Serial.println("I2C_SUMP_MODULE_ADDRESS");
+//      Serial.println(Tank_Data.tankNo);
+//      Serial.println(Tank_Data.sensorValue);
 
-  //   delay(400);
-  //   if(digitalRead(keypadOKPin) == false)
-  //   {
-  //        LogSerial(false,logFunc,false,String("OK Key pressed"));
-  //   }
-  //   else if(digitalRead(keypadUpPin) == false)
-  //   {
-  //        LogSerial(false,logFunc,false,String("Up Key pressed"));
-  //   }
-  //   else if(digitalRead(keypadDownPin) == false)
-  //   {
-  //        LogSerial(false,logFunc,false,String("Down Key pressed"));
-  //   }
-  //   else if(digitalRead(keypadResetPin) == false)
-  //   {
-  //        LogSerial(false,logFunc,false,String("Reset Key pressed"));
-  //   }
-  //   else if(digitalRead(keypadRefillPin) == false)
-  //   {
-  //        LogSerial(false,logFunc,false,String("Refill Key pressed"));
-  //   }
-  //
-  //   //Test LED Indicators
-  //    digitalWrite(LED3, HIGH);
-  //    delay(100);
-  //    digitalWrite(LED3, LOW);
-  //
-  //    //Test Relays
-  //    digitalWrite(Relay1, HIGH);
-  //    delay(500);
-  //    digitalWrite(Relay1, LOW);
-  //
-  //    digitalWrite(Relay2, HIGH);
-  //    delay(1000);
-  //    digitalWrite(Relay2, LOW);
-  //
-  //    digitalWrite(Relay3, HIGH);
-  //    delay(1000);
-  //    digitalWrite(Relay3, LOW);
-  //
-  //  //Test  Buzzer
-  //    digitalWrite(buzzerPin, HIGH);
-  //    delay(400);
-  //    digitalWrite(buzzerPin, LOW);
+      HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
+      delay(500);
+
+    } //Read Sensor values form Tank Module
+    if (TransferIn.receiveData(I2C_TANK_MODULE_ADDRESS)) {
+
+      //Since  primary tank no = 1 reserved for Sump, we add this no for another tanks
+      Tank_Data.tankNo = Tank_Data.tankNo + PrimaryTankNo;
+//      Serial.println("I2C_TANK_MODULE_ADDRESS");
+//      Serial.println(Tank_Data.tankNo);
+//      Serial.println(Tank_Data.sensorValue);
+
+      HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
+      delay(500);
+    }
+
+  }//end of else loop
 
 }
 
-//
+// Handle sensor value based on Tank No
 void HandleSensorValues(int tankCount, float tankDistance)
 {
-  bool upperTankON = false;
-  bool upperTankOFF = false;
-  bool primaryTankFilled = false;
-
-  //Actual logic commenting for some time
-  // for(int tankCount = 1; tankCount <= TanksSelected ; tankCount++)
-  //   {
+  
   bool primary = false;
 
   if (m_pConfigureLib)
     primary = m_pConfigureLib->IsTankPrimary(tankCount);
-
-  //float tankDistance = GetTankStatus(tankCount);
 
   //if(m_pConfigureLib)
   //  m_pConfigureLib->SetTankFilledHeight(tankCount,tankDistance);
@@ -326,7 +281,7 @@ void HandleSensorValues(int tankCount, float tankDistance)
   else
     strcpy(tName, "Tank%d:");
 
-  String tankName = FormatIntMessage(tName, tankCount);
+  String tankName = FormatIntMessage(tName, tankCount - 1);
 
   if (EnableDebug)
   {
@@ -358,76 +313,74 @@ void HandleSensorValues(int tankCount, float tankDistance)
   if (primary)
   {
     if (tankDistance >= leve80)
-      primaryTankFilled = false;
+      PrimaryTankFilled = false;
     else
-      primaryTankFilled = true;
+      PrimaryTankFilled = true;
   }
   else
   {
     //Check T2,T3 full staus
-    if (!upperTankON)
+    if (!UpperTankON)
     {
       if (tankDistance >= leve80)
-        upperTankON = true;
+        UpperTankON = true;
       else
-        upperTankON = false;
+        UpperTankON = false;
     }
 
     if (tankDistance <= leve20)
-      upperTankOFF = true;
+      UpperTankOFF = true;
     else
-      upperTankOFF = false;
+      UpperTankOFF = false;
 
   }
 
-  // }
-
   //This controls sump and borewell pins
-  CoreControllerLogic(primaryTankFilled, upperTankON, upperTankOFF);
+  CoreControllerLogic();
 }
 
 //Core control logic of WLC
-void CoreControllerLogic(bool primaryTankFilled, bool upperTankON, bool upperTankOFF)
+void CoreControllerLogic()//bool primaryTankFilled, bool upperTankON, bool upperTankOFF
 {
 
-  // Serial.println(primaryTankFilled);
-  //Serial.println(upperTankON);
-  //Serial.println(upperTankOFF);
+  Serial.println(PrimaryTankFilled);
+  Serial.println(UpperTankON);
+  Serial.println(UpperTankOFF);
 
-  if (!upperTankON && upperTankOFF )
+  if (!UpperTankON && UpperTankOFF )
   {
     //SUMP & BORE Motor OFF
-    digitalWrite(sumpMotorPin, LOW);
+    digitalWrite(Relay3, LOW);
     digitalWrite(boreMotorPin, LOW);
   }
   else
   {
-    if (primaryTankFilled)
+    if (PrimaryTankFilled)
     {
-      if (upperTankON)
+      if (UpperTankON)
       {
         //SUMP MOTOR ON
-        digitalWrite(sumpMotorPin, HIGH);
+        digitalWrite(Relay3, HIGH);
         //Bore pump OFF
         digitalWrite(boreMotorPin, LOW);
       }
     }
     else
     {
-      if (upperTankON)
+      if (UpperTankON)
       {
         //SUMP Motor OFF
-        digitalWrite(sumpMotorPin, LOW);
+        digitalWrite(Relay3, LOW);
         //Bore pump ON
         digitalWrite(boreMotorPin, HIGH);
       }
-      else if (upperTankOFF)
+      else if (UpperTankOFF)
       {
         //Bore MOTOR OFF
         digitalWrite(boreMotorPin, LOW);
 
         //SUMP MOTOR OFF
-        digitalWrite(sumpMotorPin, LOW);
+        digitalWrite(Relay3, LOW);
       }
     }
 
@@ -505,7 +458,7 @@ void ReadConfigDataFromEEPROM()
       else
         strcpy(tName, "Tank%d:");
 
-      String tankName = FormatIntMessage(tName, tankCount);
+      String tankName = FormatIntMessage(tName, tankCount - 1);
 
       address++;
       isPrimary = EEPROM.read(address);
@@ -607,7 +560,9 @@ void SetupConfiguration()
     else
       strcpy(tName, "Tank%d:");
 
-    String tankName = FormatIntMessage(tName, tankCount);
+      
+
+    String tankName = FormatIntMessage(tName, tankCount - 1);
     String displayMsg = "";
     displayMsg  += tankName + "Ht in inch";
 
@@ -829,7 +784,6 @@ String FormatIntMessage(char* msg, int value)
   return message;
 }
 
-
 //Set tank status w.r.t value as signal level
 void ShowTankStatusInLCD(String message1, float val, float tankheight)
 {
@@ -966,7 +920,6 @@ void ShowTankStatusInLCD(String message1, float val, float tankheight)
 
 }
 
-
 //Log function
 void LogSerial(bool nextLine, String function, bool flow, String msg)
 {
@@ -981,3 +934,50 @@ void LogSerial(bool nextLine, String function, bool flow, String msg)
       Serial.print(msg);
   }
 }
+
+
+//Test code
+
+//     if(digitalRead(keypadOKPin) == false)
+//     {
+//          LogSerial(false,logFunc,false,String("OK Key pressed"));
+//     }
+//     else if(digitalRead(keypadUpPin) == false)
+//     {
+//          LogSerial(false,logFunc,false,String("Up Key pressed"));
+//     }
+//     else if(digitalRead(keypadDownPin) == false)
+//     {
+//          LogSerial(false,logFunc,false,String("Down Key pressed"));
+//     }
+//     else if(digitalRead(keypadResetPin) == false)
+//     {
+//          LogSerial(false,logFunc,false,String("Reset Key pressed"));
+//     }
+//     else if(digitalRead(keypadRefillPin) == false)
+//     {
+//          LogSerial(false,logFunc,false,String("Refill Key pressed"));
+//     }
+
+//Test LED Indicators
+//      digitalWrite(LED3, HIGH);
+//      delay(100);
+//      digitalWrite(LED3, LOW);
+
+//Test Relays
+//      digitalWrite(sumpMotorPin, HIGH);
+//      delay(500);
+//      digitalWrite(sumpMotorPin, LOW);
+//
+//      digitalWrite(boreMotorPin, HIGH);
+//      delay(1000);
+//      digitalWrite(boreMotorPin, LOW);
+//
+//      digitalWrite(Relay3, HIGH);
+//      delay(1000);
+//      digitalWrite(Relay3, LOW);
+
+//Test  Buzzer
+//      digitalWrite(buzzerPin, HIGH);
+//      delay(400);
+//      digitalWrite(buzzerPin, LOW);
