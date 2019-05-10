@@ -50,12 +50,6 @@ bool EnableDebug = true;
 bool SumpMotorExists  = false;
 bool BoreMotorExists = false;
 
-//Levels of Each tank in percentage
-float leve0 = 0; //zero level or 5%
-float leve20 = 0;//20 % of the tank height
-float leve50 = 0;//50% of tank height
-float leve80 = 0;//80% of tank height
-float leve100 = 0;//50% of tank height
 
 /*
   Bar Graph Logic To display Tank filled status
@@ -132,10 +126,10 @@ const int PrimaryTankNo = 1;
 const int ErrorReading = 1000;
 
 //Tank handling status in core logic
-bool UpperTankON = false;
-bool UpperTankOFF = false;
-bool PrimaryTankFilled = false;
-  
+//bool UpperTankON = false;
+//bool UpperTankOFF = false;
+//bool PrimaryTankFilled = false;
+
 
 //Tanks data structure
 struct TANK_DATA_STRUCTURE {
@@ -147,6 +141,7 @@ struct TANK_DATA_STRUCTURE {
 struct CONFIG_DATA_STRUCTURE {
   int TotalTanks;
 };
+
 
 //create Datastructures objects for I2C
 TANK_DATA_STRUCTURE Tank_Data;
@@ -190,7 +185,7 @@ void setup() {
   Serial.begin(9600); // Starts the serial communication
 
   TransferIn.begin(details(Tank_Data), &Wire);  //this initializes the Tank_data data object
-  TransferOut.begin(details(Tank_Data), &Wire);  //this initializes the Config_data data object
+  TransferOut.begin(details(Config_Data), &Wire);  //this initializes the Config_data data object
   Wire.onReceive(receive); // register event
 
   //Read EEPROM to check data exists
@@ -231,16 +226,19 @@ void loop() {
   }
   else
   {
-    //Send Max tank details to Tank module
-    //Tank_Data.TotalTanks = TanksSelected - 1;
+    //Send Max tank details to Overhead Tank module (ideally considering we have 2 tanks at terrace)
+    Config_Data.TotalTanks = TanksSelected - 1;
     TransferOut.sendData(I2C_TANK_MODULE_ADDRESS);
-  
+
     //Read Sensors value from Sump module
     if (TransferIn.receiveData(I2C_SUMP_MODULE_ADDRESS)) {
 
-//      Serial.println("I2C_SUMP_MODULE_ADDRESS");
-//      Serial.println(Tank_Data.tankNo);
-//      Serial.println(Tank_Data.sensorValue);
+      if (EnableDebug)
+      {
+        // Serial.println("I2C_SUMP_MODULE_ADDRESS");
+        // Serial.println(Tank_Data.tankNo);
+        // Serial.println(Tank_Data.sensorValue);
+      }
 
       HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
       delay(500);
@@ -250,10 +248,13 @@ void loop() {
 
       //Since  primary tank no = 1 reserved for Sump, we add this no for another tanks
       Tank_Data.tankNo = Tank_Data.tankNo + PrimaryTankNo;
-//      Serial.println("I2C_TANK_MODULE_ADDRESS");
-//      Serial.println(Tank_Data.tankNo);
-//      Serial.println(Tank_Data.sensorValue);
 
+      if (EnableDebug)
+      {
+        // Serial.println("I2C_TANK_MODULE_ADDRESS");
+        // Serial.println(Tank_Data.tankNo);
+        // Serial.println(Tank_Data.sensorValue);
+      }
       HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
       delay(500);
     }
@@ -263,25 +264,22 @@ void loop() {
 }
 
 // Handle sensor value based on Tank No
-void HandleSensorValues(int tankCount, float tankDistance)
+void HandleSensorValues(int tankNo, float tankDistance)
 {
-  
+
   bool primary = false;
 
   if (m_pConfigureLib)
-    primary = m_pConfigureLib->IsTankPrimary(tankCount);
-
-  //if(m_pConfigureLib)
-  //  m_pConfigureLib->SetTankFilledHeight(tankCount,tankDistance);
+    primary = m_pConfigureLib->IsTankPrimary(tankNo);
 
   char tName[10] = "";
 
-  if (tankCount == PrimaryTankNo)
+  if (tankNo == PrimaryTankNo)
     strcpy(tName, "Sump");
   else
     strcpy(tName, "Tank%d:");
 
-  String tankName = FormatIntMessage(tName, tankCount - 1);
+  String tankName = FormatIntMessage(tName, tankNo - 1);
 
   if (EnableDebug)
   {
@@ -290,18 +288,8 @@ void HandleSensorValues(int tankCount, float tankDistance)
     Serial.println(tankDistance);
   }
 
-  float tankHeight = 0;
-  if (m_pConfigureLib)
-    tankHeight =  m_pConfigureLib->GetTankFillHeight(tankCount);
 
-  //Calculate levels dynamically
-  leve0 = (tankHeight * 0.05); //zero level or 5%
-  leve20 = (tankHeight * 0.20);//20 % of the tank height
-  leve50 = (tankHeight * 0.50);//50% of tank height
-  leve80 = (tankHeight * 0.80);//80% of tank height
-  leve100 = tankHeight;//50% of tank height
-
-  ShowTankStatusInLCD(tankName, tankDistance, tankHeight);
+  ShowTankStatusInLCD(tankName, tankDistance, tankNo);
   delay(1000);
 
   if (tankDistance > ErrorReading)
@@ -309,31 +297,8 @@ void HandleSensorValues(int tankCount, float tankDistance)
     LogSerial(false, logFunc, false, String("Sesor Error !!"));
   }
 
-  //Check primary tank/Sump filled status
-  if (primary)
-  {
-    if (tankDistance >= leve80)
-      PrimaryTankFilled = false;
-    else
-      PrimaryTankFilled = true;
-  }
-  else
-  {
-    //Check T2,T3 full staus
-    if (!UpperTankON)
-    {
-      if (tankDistance >= leve80)
-        UpperTankON = true;
-      else
-        UpperTankON = false;
-    }
-
-    if (tankDistance <= leve20)
-      UpperTankOFF = true;
-    else
-      UpperTankOFF = false;
-
-  }
+  if (m_pConfigureLib)
+    m_pConfigureLib->SetTankDistance(tankNo, tankDistance);
 
   //This controls sump and borewell pins
   CoreControllerLogic();
@@ -343,11 +308,31 @@ void HandleSensorValues(int tankCount, float tankDistance)
 void CoreControllerLogic()//bool primaryTankFilled, bool upperTankON, bool upperTankOFF
 {
 
-  Serial.println(PrimaryTankFilled);
-  Serial.println(UpperTankON);
-  Serial.println(UpperTankOFF);
+  //Tank handling status in core logic
+  bool overheadTank1Filled = false;
+  bool overheadTank2Filled = false;
+  bool sumpFilled = false;
 
-  if (!UpperTankON && UpperTankOFF )
+  if (m_pConfigureLib)
+  {
+    sumpFilled = m_pConfigureLib->IsSumpFilled();
+    overheadTank1Filled = m_pConfigureLib->IsOverHeadTank1Filled();
+    overheadTank2Filled = m_pConfigureLib->IsOverHeadTank2Filled();
+  }
+
+
+  if (EnableDebug)
+  {
+    Serial.print("Sump Filled :");
+    Serial.print(sumpFilled);
+    Serial.print("OverheadTank1 Filled :");
+    Serial.print(overheadTank1Filled);
+    Serial.print("OverheadTank2 Filled :");
+    Serial.println(overheadTank2Filled);
+
+  }
+
+  if (overheadTank1Filled && overheadTank2Filled )
   {
     //SUMP & BORE Motor OFF
     digitalWrite(Relay3, LOW);
@@ -355,26 +340,37 @@ void CoreControllerLogic()//bool primaryTankFilled, bool upperTankON, bool upper
   }
   else
   {
-    if (PrimaryTankFilled)
+    if (sumpFilled)
     {
-      if (UpperTankON)
+      //if sump has water and overhead tanks is not filled, just enable sump motor
+      if (!overheadTank1Filled || !overheadTank2Filled)
       {
         //SUMP MOTOR ON
         digitalWrite(Relay3, HIGH);
         //Bore pump OFF
         digitalWrite(boreMotorPin, LOW);
       }
+      else if (overheadTank1Filled || overheadTank2Filled)
+      {
+         //SUMP MOTOR OFF
+        digitalWrite(Relay3, LOW);
+        
+        //Bore MOTOR OFF
+        digitalWrite(boreMotorPin, LOW);
+     
+      }
     }
     else
     {
-      if (UpperTankON)
+
+      if (!overheadTank1Filled || !overheadTank2Filled)
       {
         //SUMP Motor OFF
         digitalWrite(Relay3, LOW);
         //Bore pump ON
         digitalWrite(boreMotorPin, HIGH);
       }
-      else if (UpperTankOFF)
+      else if (overheadTank1Filled || overheadTank2Filled)
       {
         //Bore MOTOR OFF
         digitalWrite(boreMotorPin, LOW);
@@ -559,8 +555,6 @@ void SetupConfiguration()
       strcpy(tName, "Sump");
     else
       strcpy(tName, "Tank%d:");
-
-      
 
     String tankName = FormatIntMessage(tName, tankCount - 1);
     String displayMsg = "";
@@ -785,11 +779,22 @@ String FormatIntMessage(char* msg, int value)
 }
 
 //Set tank status w.r.t value as signal level
-void ShowTankStatusInLCD(String message1, float val, float tankheight)
+void ShowTankStatusInLCD(String message1, float val, int tankNo)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
   lcd.print(message1);
+
+  float tankHeight = 0;
+  if (m_pConfigureLib)
+    tankHeight = m_pConfigureLib->GetTankFillHeight(tankNo);
+
+  //Calculate levels dynamically
+  float leve0 = (tankHeight * 0.05); //zero level or 5%
+  float leve20 = (tankHeight * 0.20);//20 % of the tank height
+  float leve50 = (tankHeight * 0.50);//50% of tank height
+  float leve80 = (tankHeight * 0.80);//80% of tank height
+  float leve100 = tankHeight;//50% of tank height
 
 
   if (val > ErrorReading)

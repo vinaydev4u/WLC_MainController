@@ -25,7 +25,9 @@ class Tank
       int GetBottomToFillHeight();
       int GetFillToSensorHeight();
       void SetTankFilledHeight(float value);
-        
+      void SetTankDistance(float distance);
+      bool IsTankFilled();
+     
   private:
       //Store Tank details in class
       String TankName; // Tank Name
@@ -35,6 +37,7 @@ class Tank
       int    BottomToFillHeight;
       int    FillToSensorHeight;
       float  FilledHeight;
+      float  Distance;
  };
 
 
@@ -75,6 +78,14 @@ class ConfigureLib
 
       void SetTankFilledHeight(int tankNo,float value);
 
+      void SetTankDistance(int tankNo, float tankDistance);
+      
+      bool IsOverHeadTank1Filled();
+
+      bool IsOverHeadTank2Filled();
+
+      bool IsSumpFilled();
+      
 };
 
 #endif
