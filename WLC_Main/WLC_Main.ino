@@ -9,6 +9,10 @@
 #include "ConfigureLib.h"
 #include <TransferI2C_WLC.h>
 
+#define SumpTankNo  1
+#define OverheadTankNo1  2
+#define OverheadTankNo2  3
+
 int I2C_SUMP_MODULE_ADDRESS = 11;
 int I2C_TANK_MODULE_ADDRESS = 12;
 
@@ -50,6 +54,9 @@ bool EnableDebug = true;
 bool SumpMotorExists  = false;
 bool BoreMotorExists = false;
 
+//Refill Tank feature
+bool RefillTank = false;
+int RefillTankNo = OverheadTankNo1;
 
 /*
   Bar Graph Logic To display Tank filled status
@@ -207,6 +214,10 @@ void request() {
 
 void loop() {
 
+  //Send Max tank details to Overhead Tank module (ideally considering we have 2 tanks at terrace)
+  Config_Data.TotalTanks = TanksSelected - 1;
+  TransferOut.sendData(I2C_TANK_MODULE_ADDRESS);
+
   //Check for reset pin to reset the configration settings
   if (digitalRead(keypadResetPin) == false)
   {
@@ -224,44 +235,56 @@ void loop() {
     //Configuration Setup for each tank with parameters required
     SetupConfiguration();
   }
-  else
+  else if (digitalRead(keypadRefillPin) == false)
   {
-    //Send Max tank details to Overhead Tank module (ideally considering we have 2 tanks at terrace)
-    Config_Data.TotalTanks = TanksSelected - 1;
-    TransferOut.sendData(I2C_TANK_MODULE_ADDRESS);
+    delay(200);
+    if (EnableDebug)
+      Serial.println("keypadRefill Pin pressed");
 
-    //Read Sensors value from Sump module
-    if (TransferIn.receiveData(I2C_SUMP_MODULE_ADDRESS)) {
+    RefillTank = true;
+  }
 
-      if (EnableDebug)
-      {
-        // Serial.println("I2C_SUMP_MODULE_ADDRESS");
-        // Serial.println(Tank_Data.tankNo);
-        // Serial.println(Tank_Data.sensorValue);
-      }
+  //Read Sensors value from Sump module
+  if (TransferIn.receiveData(I2C_SUMP_MODULE_ADDRESS)) {
 
-      HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
-      delay(500);
-
-    } //Read Sensor values form Tank Module
-    if (TransferIn.receiveData(I2C_TANK_MODULE_ADDRESS)) {
-
-      //Since  primary tank no = 1 reserved for Sump, we add this no for another tanks
-      Tank_Data.tankNo = Tank_Data.tankNo + PrimaryTankNo;
-
-      if (EnableDebug)
-      {
-        // Serial.println("I2C_TANK_MODULE_ADDRESS");
-        // Serial.println(Tank_Data.tankNo);
-        // Serial.println(Tank_Data.sensorValue);
-      }
-      HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
-      delay(500);
+    if (EnableDebug)
+    {
+      // Serial.println("I2C_SUMP_MODULE_ADDRESS");
+      // Serial.println(Tank_Data.tankNo);
+      // Serial.println(Tank_Data.sensorValue);
     }
 
-  }//end of else loop
+    HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
+    delay(500);
+
+  } //Read Sensor values form Tank Module
+  if (TransferIn.receiveData(I2C_TANK_MODULE_ADDRESS)) {
+
+    //Since  primary tank no = 1 reserved for Sump, we add this no for another tanks
+    Tank_Data.tankNo = Tank_Data.tankNo + PrimaryTankNo;
+
+    if (EnableDebug)
+    {
+      // Serial.println("I2C_TANK_MODULE_ADDRESS");
+      // Serial.println(Tank_Data.tankNo);
+      // Serial.println(Tank_Data.sensorValue);
+    }
+
+    if (RefillTank)
+    {
+      //Check selected tank and fill the selcted tank
+      if (Tank_Data.tankNo == RefillTankNo)
+        HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
+    }
+    else
+    {
+      HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
+    }
+    delay(500);
+  }
 
 }
+
 
 // Handle sensor value based on Tank No
 void HandleSensorValues(int tankNo, float tankDistance)
@@ -337,6 +360,8 @@ void CoreControllerLogic()//bool primaryTankFilled, bool upperTankON, bool upper
     //SUMP & BORE Motor OFF
     digitalWrite(Relay3, LOW);
     digitalWrite(boreMotorPin, LOW);
+
+    RefillTank = false;
   }
   else
   {
@@ -352,12 +377,13 @@ void CoreControllerLogic()//bool primaryTankFilled, bool upperTankON, bool upper
       }
       else if (overheadTank1Filled || overheadTank2Filled)
       {
-         //SUMP MOTOR OFF
+        //SUMP MOTOR OFF
         digitalWrite(Relay3, LOW);
-        
+
         //Bore MOTOR OFF
         digitalWrite(boreMotorPin, LOW);
-     
+
+        RefillTank = false;
       }
     }
     else
@@ -377,6 +403,8 @@ void CoreControllerLogic()//bool primaryTankFilled, bool upperTankON, bool upper
 
         //SUMP MOTOR OFF
         digitalWrite(Relay3, LOW);
+
+        RefillTank = false;
       }
     }
 
