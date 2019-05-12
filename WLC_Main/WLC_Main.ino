@@ -154,7 +154,6 @@ struct CONFIG_DATA_STRUCTURE {
 TANK_DATA_STRUCTURE Tank_Data;
 CONFIG_DATA_STRUCTURE Config_Data;
 
-TANK_DATA_STRUCTURE Tanks_Data[MaxTanksSupported];
 TransferI2C_WLC TransferOut, TransferIn;
 
 //Basic setup
@@ -217,7 +216,8 @@ void loop() {
   //Send Max tank details to Overhead Tank module (ideally considering we have 2 tanks at terrace)
   Config_Data.TotalTanks = TanksSelected - 1;
   TransferOut.sendData(I2C_TANK_MODULE_ADDRESS);
-
+  Serial.println(Config_Data.TotalTanks);
+  
   //Check for reset pin to reset the configration settings
   if (digitalRead(keypadResetPin) == false)
   {
@@ -249,9 +249,9 @@ void loop() {
 
     if (EnableDebug)
     {
-      // Serial.println("I2C_SUMP_MODULE_ADDRESS");
-      // Serial.println(Tank_Data.tankNo);
-      // Serial.println(Tank_Data.sensorValue);
+       Serial.println("I2C_SUMP_MODULE_ADDRESS");
+       Serial.println(Tank_Data.tankNo);
+       Serial.println(Tank_Data.sensorValue);
     }
 
     HandleSensorValues(Tank_Data.tankNo, Tank_Data.sensorValue);
@@ -265,9 +265,9 @@ void loop() {
 
     if (EnableDebug)
     {
-      // Serial.println("I2C_TANK_MODULE_ADDRESS");
-      // Serial.println(Tank_Data.tankNo);
-      // Serial.println(Tank_Data.sensorValue);
+       Serial.println("I2C_TANK_MODULE_ADDRESS");
+       Serial.println(Tank_Data.tankNo);
+       Serial.println(Tank_Data.sensorValue);
     }
 
     if (RefillTank)

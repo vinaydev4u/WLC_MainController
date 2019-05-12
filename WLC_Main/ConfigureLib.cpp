@@ -30,6 +30,7 @@ Tank::Tank(String tankName, int no, bool primary, int height1, int height2)
   IsPrimaryTank = primary;
   BottomToFillHeight = height1;
   FillToSensorHeight = height2;
+  Distance = -1;
 
   Height = BottomToFillHeight + FillToSensorHeight;
 }
@@ -85,8 +86,13 @@ bool Tank::IsTankFilled()
   leve80 = (BottomToFillHeight * 0.80);//80% of tank height
   leve100 = BottomToFillHeight;//50% of tank height
   
-  if(Distance >= leve80)
-      tankFilled = false;  
+  if(Distance >= leve80 || Distance == -1)
+      tankFilled = false;
+
+   Serial.println("Tank::IsTankFilled()");
+   Serial.println(TankNo);
+   Serial.println(BottomToFillHeight);
+   Serial.println(Distance);
 
   return tankFilled;
 }
@@ -254,8 +260,3 @@ bool ConfigureLib::IsOverHeadTank2Filled()
   
   return tankFilled;
 }
-
-
-
-
-
